@@ -33,8 +33,10 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.net.URL;
 import java.util.HashSet;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,9 +45,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class JDownloader
 {
-    private final Logger logger = LoggerFactory.getLogger( JDownloader.class );
-
     final static int PART_COUNT = 20;
+
+    private final Logger logger = LoggerFactory.getLogger( JDownloader.class );
 
     private String remote;
 
@@ -53,16 +55,25 @@ public class JDownloader
 
     private PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
 
-    private LinkedBlockingQueue<PartCache> queue = new LinkedBlockingQueue<>( 20 );
+    private BlockingQueue<PartCache> queue = new LinkedBlockingQueue<>( PART_COUNT );
 
     private boolean single;
 
     public JDownloader ( String remote )
     {
         this.remote = remote;
-        cm.setDefaultMaxPerRoute( 20 );
+        // Slightly smaller connection pool than the split count ; this ensures we don't
+        // cache the entire file in memory at once but stagger it slightly.
+        cm.setDefaultMaxPerRoute( PART_COUNT - (int)( PART_COUNT * 0.15 ) );
+        cm.setMaxTotal( PART_COUNT * 10 );
     }
 
+    /**
+     * Define target file to write to. Optional, if not set, then it will default to
+     * working directory and final filename of remote.
+     * @param target the target filename.
+     * @return this object.
+     */
     public JDownloader target( String target )
     {
         this.target = target;
@@ -85,6 +96,7 @@ public class JDownloader
     {
         URL url = new URL( remote );
         long remoteSize = 0;
+        RandomAccessFile targetFile;
 
         // If target hasn't been set the default it to the filename portion of the original file
         if ( target == null )
@@ -118,8 +130,10 @@ public class JDownloader
                         downloadThreaded = true;
                         remoteSize = Long.parseLong( length.getValue() );
 
-                        logger.debug( "Length of remote is {} ({})", ByteUtils.humanReadableByteCount( remoteSize ),
-                                      remoteSize );
+                        if ( logger.isDebugEnabled() )
+                        {
+                            logger.debug( "Length of remote is {} ({})", ByteUtils.humanReadableByteCount( remoteSize ), remoteSize );
+                        }
                     }
                 }
                 else
@@ -138,32 +152,23 @@ public class JDownloader
             CloseableHttpClient pooledClient = HttpClients.custom().setConnectionManager( cm ).build();
             // 1 extra than the number of splits for the writer thread.
             ExecutorService service = Executors.newFixedThreadPool(PART_COUNT + 1);
-            HashSet<Future> parts = new HashSet<>(  );
+            HashSet<Future<PartCache>> parts = new HashSet<>(  );
+
+            targetFile = new RandomAccessFile( target, "rw" );
+            // Pre-allocate the length to avoid repeated resize.
+            targetFile.setLength( remoteSize );
 
             for ( int i=1 ; i<=PART_COUNT; i++)
             {
-                parts.add( service.submit( new PartExtractor( queue, pooledClient, remote, remoteSize, range, i) ) );
+                parts.add( service.submit( new PartExtractor( pooledClient, remote, remoteSize, range, i) ) );
             }
-            // TODO: Determine if its better to write from a single thread or multiple. Logically, I would
-            // TODO: think from a single with a queue.
-            Future wFuture = service.submit( new Writer ( queue, target ) );
+            Future wFuture = service.submit( new Writer ( queue, targetFile ) );
 
-            service.shutdown();
-
-            while ( true )
-            {
-                if ( wFuture.isDone() )
-                {
-                    break;
-                }
-                // no-op
-            }
-
-            for ( Future f : parts )
+            for ( Future<PartCache> f : parts )
             {
                 try
                 {
-                    f.get();
+                    queue.put( f.get() );
                 }
                 catch ( InterruptedException | ExecutionException e )
                 {
@@ -175,10 +180,34 @@ public class JDownloader
                     {
                         throw (InternalException)e.getCause();
                     }
-                    logger.error( "Caught exception from PartExtractor", e);
-                    throw new InternalException( "Caught exception from PartExtractor", e);
+                    else if ( e.getCause() instanceof OutOfMemoryError )
+                    {
+                        logger.error( "Caught OutOfMemory exception from PartExtractor", e);
+
+                        // Terminate as fatal error.
+                        service.shutdownNow();
+                        break;
+                    }
+                    else
+                    {
+                        logger.error( "Caught exception from PartExtractor", e );
+                        throw new InternalException( "Caught exception from PartExtractor", e );
+                    }
                 }
             }
+
+            while ( true )
+            {
+                // no-op
+                if ( wFuture.isDone() )
+                {
+                    break;
+                }
+            }
+
+            service.shutdown();
+            pooledClient.close();
+            targetFile.close();
         }
         else
         {

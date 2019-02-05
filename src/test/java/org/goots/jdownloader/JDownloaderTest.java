@@ -19,6 +19,7 @@ package org.goots.jdownloader;
 import org.apache.commons.io.FileUtils;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.contrib.java.lang.system.SystemOutRule;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
@@ -31,19 +32,83 @@ public class JDownloaderTest
     @Rule
     public final TemporaryFolder folder = new TemporaryFolder(  );
 
+    @Rule
+    public final SystemOutRule systemRule = new SystemOutRule().enableLog().muteForSuccessfulTests();
+
+    @Test
+    public void verifyContentsDirect() throws Exception
+    {
+        URL source = new URL("http://central.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar");
+
+        File original = folder.newFile();
+        FileUtils.copyURLToFile(source, original );
+
+        File target = folder.newFile();
+
+        new JDownloader(source.toString() ).target( target.getAbsolutePath() ).execute();
+
+        assertTrue ( FileUtils.contentEquals( original, target ) );
+    }
+
+    @Test
+    public void verifyContentsImplicitTargetDirect() throws Exception
+    {
+        URL source = new URL("http://central.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar");
+
+        File original = folder.newFile();
+        FileUtils.copyURLToFile(source, original );
+
+        File target = new File ("commons-io-2.6.jar");
+
+        try
+        {
+            new JDownloader( source.toString() ).execute();
+
+            assertTrue( FileUtils.contentEquals( original, target ) );
+        }
+        finally
+        {
+            target.deleteOnExit();
+        }
+    }
+
     @Test
     public void verifyContents() throws Exception
     {
-        URL commonsio = new URL("http://central.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar");
+        URL source = new URL("http://central.maven.org/maven2/org/commonjava/maven/ext/pom-manipulation-cli/3.3.1/pom-manipulation-cli-3.3.1.jar" );
 
         File original = folder.newFile();
-        FileUtils.copyURLToFile(commonsio, original );
+        FileUtils.copyURLToFile(source, original );
 
-        File newdownload = folder.newFile();
+        File target = folder.newFile();
 
-        new JDownloader(commonsio.toString() ).target( newdownload.getAbsolutePath() ).execute();
+        new Main().enableDebug();
+        new JDownloader(source.toString() ).target( target.getAbsolutePath() ).execute();
 
-        assertTrue ( FileUtils.contentEquals( original, newdownload ) );
+        assertTrue ( FileUtils.contentEquals( original, target ) );
+        assertTrue( systemRule.getLog().contains( "Completed writing" ) );
     }
 
+    @Test
+    public void verifyContentsImplicitTarget() throws Exception
+    {
+        URL source = new URL("http://central.maven.org/maven2/org/commonjava/maven/ext/pom-manipulation-cli/3.3.1/pom-manipulation-cli-3.3.1.jar" );
+
+        File original = folder.newFile();
+        FileUtils.copyURLToFile(source, original );
+
+        File target = new File ("pom-manipulation-cli-3.3.1.jar");
+
+        try
+        {
+            new JDownloader( source.toString() ).execute();
+
+            assertTrue( FileUtils.contentEquals( original, target ) );
+            assertTrue( systemRule.getLog().contains( "Completed writing" ) );
+        }
+        finally
+        {
+            target.deleteOnExit();
+        }
+    }
 }

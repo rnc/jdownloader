@@ -29,7 +29,7 @@
   <artifactId>jdownloader</artifactId>
   <version>0.1-SNAPSHOT</version>
 
-  <name>Multithreaded File org.goots.jdownloader.JDownloader</name>
+  <name>Multithreaded File Downloader</name>
   <inceptionYear>2019</inceptionYear>
 
   <licenses>
@@ -95,11 +95,6 @@
         <version>4.4.11</version>
       </dependency>
 
-      <!-- <dependency> -->
-      <!--   <groupId>commons-lang</groupId> -->
-      <!--   <artifactId>commons-lang</artifactId> -->
-      <!--   <version>2.6</version> -->
-      <!-- </dependency> -->
       <dependency>
         <groupId>commons-io</groupId>
         <artifactId>commons-io</artifactId>
@@ -110,14 +105,6 @@
         <artifactId>picocli</artifactId>
         <version>3.9.2</version>
       </dependency>
-
-      <!-- <dependency> -->
-      <!--   <groupId>org.projectlombok</groupId> -->
-      <!--   <artifactId>lombok</artifactId> -->
-      <!--   <version>1.18.4</version> -->
-      <!--   <scope>provided</scope> -->
-      <!-- </dependency> -->
-
 
       <dependency>
         <groupId>junit</groupId>
@@ -155,10 +142,6 @@
       <groupId>info.picocli</groupId>
       <artifactId>picocli</artifactId>
       </dependency>
-    <!-- <dependency> -->
-    <!--   <groupId>org.projectlombok</groupId> -->
-    <!--   <artifactId>lombok</artifactId> -->
-    <!-- </dependency> -->
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpclient</artifactId>
@@ -168,12 +151,6 @@
       <artifactId>httpcore</artifactId>
     </dependency>
 
-    <!--
-    <dependency>
-      <groupId>commons-lang</groupId>
-      <artifactId>commons-lang</artifactId>
-    </dependency>
--->
     <dependency>
       <groupId>commons-io</groupId>
       <artifactId>commons-io</artifactId>
