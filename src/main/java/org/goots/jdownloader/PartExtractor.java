@@ -16,29 +16,22 @@
 
 package org.goots.jdownloader;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
-import org.apache.http.client.methods.CloseableHttpResponse;
+import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.impl.client.CloseableHttpClient;
-import org.goots.jdownloader.utils.InternalException;
+import org.apache.http.util.EntityUtils;
 import org.goots.jdownloader.utils.PartCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.Callable;
-import java.util.concurrent.LinkedBlockingQueue;
 
-class PartExtractor implements Callable<Object>
+class PartExtractor implements Callable<PartCache>
 {
     private final Logger logger = LoggerFactory.getLogger( PartExtractor.class );
-
-    private final long remoteSize;
-
-    private final long range;
 
     private final int partIndex;
 
@@ -46,65 +39,59 @@ class PartExtractor implements Callable<Object>
 
     private final String url;
 
-    private final LinkedBlockingQueue<PartCache> queue;
+    private long from;
 
-    PartExtractor( LinkedBlockingQueue<PartCache> queue, CloseableHttpClient remoteClient, String url,
-                   long remoteSize, long range, int partIndex )
+    private long to;
+
+    PartExtractor( CloseableHttpClient remoteClient, String url, long remoteSize, long range, int partIndex )
     {
         this.remoteClient = remoteClient;
         this.url = url;
-        this.remoteSize = remoteSize;
-        this.range = range;
         this.partIndex = partIndex;
-        this.queue = queue;
+
+        from = partIndex == 1 ? 0 : ( ( ( partIndex - 1 ) * range) + 1) ;
+        to = partIndex == (long) JDownloader.PART_COUNT ?
+                        // https://tools.ietf.org/html/rfc7233#page-5 range is inclusive so add 1
+                        ( remoteSize + 1 ) :
+                        ( partIndex * range );
+        logger.debug( "PartExtractor {} adding range from {} to {} ", partIndex, from, to );
     }
 
     @Override
-    public Object call() throws IOException, InternalException
+    public PartCache call() throws IOException
     {
-        String from = partIndex == 1 ? "0" : Long.toString( ( ( partIndex - 1 ) * range) + 1) ;
-        String to = partIndex == JDownloader.PART_COUNT ?
-                        // https://tools.ietf.org/html/rfc7233#page-5 range is inclusive so add 1
-                        Long.toString( remoteSize + 1 ) :
-                        Long.toString( partIndex * range );
-        logger.debug( "Adding range for index {} from {} to {} ", partIndex, from, to );
-
         HttpGet get = new HttpGet( url );
         get.addHeader( HttpHeaders.RANGE, "bytes=" + from + "-" + to );
+        PartCache result ;
 
-        try (CloseableHttpResponse httpResponse = remoteClient.execute( get, HttpClientContext.create() ) )
+        try
         {
-            if ( httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_PARTIAL_CONTENT )
-            {
-                throw new InternalException( "Did not retrieve partial content; got status " +
-                                                             httpResponse.getStatusLine().getStatusCode() +
-                                                             " and length {}" +
-                                                            httpResponse.getEntity().getContentLength() );
-            }
-            logger.debug( "### Part {} retrieved {}", partIndex, httpResponse.getEntity().getContentLength() );
+            result = remoteClient.execute( get, httpResponse -> {
+                if ( httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_PARTIAL_CONTENT )
+                {
+                    logger.error( "Did not retrieve partial content {} ", httpResponse.getStatusLine().getStatusCode() );
+                    throw new HttpResponseException( httpResponse.getStatusLine().getStatusCode(),
+                                                     "Did not retrieve partial content; got status " + httpResponse.getStatusLine().getStatusCode()
+                                                                     + " and length {}" + httpResponse.getEntity().getContentLength() );
+                }
 
-            // TODO: Determine if its better to write from a single thread or multiple. Logically, I would
-            // TODO: think from a single with a queue.
-            queue.add( new PartCache( IOUtils.toByteArray( httpResponse.getEntity().getContent() ), Long.parseLong( from ) ) );
-/*
-            RandomAccessFile randomAccessFile = new RandomAccessFile( file, "rw" );
-            randomAccessFile.seek( Long.parseLong( from ) );
+//                logger.debug( "### Part {} retrieved {} ", partIndex, httpResponse.getEntity().getContentLength() );
 
-            logger.info( "### Part {} writing {}", partIndex, httpResponse.getEntity().getContentLength() );
-
-            randomAccessFile.getChannel().transferFrom
-                             ( Channels.newChannel(
-                                             httpResponse.getEntity().getContent() ),
-                               0 , httpResponse.getEntity().getContentLength()  );
-             randomAccessFile.close();
-*/
-            logger.debug ("### Completed copy to queue for {}", partIndex);
+                return new PartCache( EntityUtils.toByteArray( httpResponse.getEntity() ), from );
+            } );
         }
-
-        get.releaseConnection();
+        catch (Throwable e )
+        {
+            logger.error( "Caught throwable: ", e );
+            throw e;
+        }
+        finally
+        {
+            get.releaseConnection();
+        }
 
         logger.debug ("Finished part extractor {}", partIndex);
 
-        return null;
+        return result;
     }
 }

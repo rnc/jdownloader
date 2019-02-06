@@ -21,7 +21,7 @@ public class PartCache
     private byte[] cache;
     private long index;
 
-    public PartCache ( byte[] b, long index)
+    public PartCache( byte[] b, long index )
     {
         this.cache = b;
         this.index = index;

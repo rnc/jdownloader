@@ -44,6 +44,7 @@ public class Main implements Callable<Void>
 
     // TODO: Should we keep this option exposed?
     // TODO: Should we instead configure limit between single thread and multi ? (currently 10MB)
+    // TODO: Theoretically we could have something like -x == always single , >= value y means multple on that value
     @Option( names = { "-s" }, paramLabel = "Single-Thread", description = "Force single thread" )
     private boolean single;
 
@@ -89,7 +90,7 @@ public class Main implements Callable<Void>
         return null;
     }
 
-    private void enableDebug()
+    void enableDebug()
     {
         ch.qos.logback.classic.Logger rootLogger =
                         (ch.qos.logback.classic.Logger) LoggerFactory.getLogger( Logger.ROOT_LOGGER_NAME );

@@ -16,64 +16,63 @@
 
 package org.goots.jdownloader;
 
-import org.goots.jdownloader.utils.InternalException;
+import org.goots.jdownloader.utils.ByteUtils;
 import org.goots.jdownloader.utils.PartCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
-import java.util.concurrent.LinkedBlockingQueue;
 
 class Writer implements Callable<Object>
 {
     private final Logger logger = LoggerFactory.getLogger( Writer.class );
 
-    private final LinkedBlockingQueue<PartCache> queue;
+    private final BlockingQueue<PartCache> queue;
 
-    private final File file;
+    private final RandomAccessFile randomAccessFile;
 
-    Writer( LinkedBlockingQueue<PartCache> queue, String target )
+    Writer( BlockingQueue<PartCache> queue, RandomAccessFile file )
     {
         this.queue = queue;
-        this.file = new File( target);
+        this.randomAccessFile = file;
     }
 
     @Override
-    public Object call() throws IOException, InternalException
+    public Object call() throws IOException, InterruptedException
     {
-        RandomAccessFile randomAccessFile = new RandomAccessFile( file, "rw" );
         int counter = 0;
         long byteCount = 0;
 
         do
         {
-            PartCache part;
-            try
-            {
-                part = queue.take();
-            }
-            catch ( InterruptedException e )
-            {
-                throw new InternalException( "Interrupted while waiting for queue", e );
-            }
+            PartCache part = queue.take();
 
-            logger.debug( "Writing {} bytes ( total : {} bytes )", part.getCachedBytes().length,
-                          ( byteCount += part.getCachedBytes().length) );
+            logger.debug( "Writing {} bytes ( total : {} bytes ) queue {} ", part.getCachedBytes().length,
+                          ( byteCount += part.getCachedBytes().length ), queue.size() );
+
+            // TODO: Determine which is quicker ; using RandomAccessFile or a MappedByteBuffer.
+            // TODO: Reference https://rick-hightower.blogspot.com/2013/11/fastet-java-io-circa-2013-writing-large.html
+            // TODO: Reference https://mechanical-sympathy.blogspot.com/2011/12/java-sequential-io-performance.html
+
             randomAccessFile.seek( part.getIndex() );
             randomAccessFile.write( part.getCachedBytes() );
-            counter++;
 
-            logger.debug( "Finished writing {} bytes to {} ( counter : {} )",
-                         part.getCachedBytes().length, file, counter );
+            // Another alternative is using channel write:
+            //   randomAccessFile.getChannel().write( ByteBuffer.wrap( part.getCachedBytes() ) );
+
+            // MappedByteBuffer buffer = randomAccessFile.getChannel().map( READ_WRITE, part.getIndex(), part.getCachedBytes().length );
+            // buffer.put( part.getCachedBytes() );
+
+            counter++;
         }
         // We know that there are X extractors so keep track of how many writes are done and exit when
         // its complete.
         while ( counter < JDownloader.PART_COUNT );
 
-        logger.info( "Completed writing {} bytes", byteCount );
+        logger.info( "Completed writing {} ( {} bytes )", ByteUtils.humanReadableByteCount( byteCount ), byteCount );
 
         return null;
     }
