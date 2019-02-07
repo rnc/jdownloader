@@ -104,65 +104,69 @@ public class JDownloader
             target = FilenameUtils.getName( url.getFile() );
         }
 
+        CloseableHttpClient pooledClient = HttpClients.custom().setConnectionManager( cm ).build();
+
         // Head parser
         HttpHead headMethod = new HttpHead( remote );
-        boolean downloadThreaded = single;
+        boolean downloadThreaded;
 
-        if ( ! downloadThreaded )
+        try ( CloseableHttpResponse httpResponse = pooledClient.execute( headMethod ))
         {
-            try (CloseableHttpClient httpClient = HttpClients.createDefault(); CloseableHttpResponse httpResponse = httpClient.execute( headMethod ))
+            if ( httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_OK )
             {
-                if ( httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_OK )
+                logger.error( "The URL is not valid {} : {}", remote, httpResponse.getStatusLine().getStatusCode() );
+            }
+
+            Header acceptRange = httpResponse.getFirstHeader( HttpHeaders.ACCEPT_RANGES );
+
+            if ( acceptRange != null && acceptRange.getValue().equals( "bytes" ) )
+            {
+                logger.debug( "Header will accept range queries" );
+
+                Header length = httpResponse.getFirstHeader( HttpHeaders.CONTENT_LENGTH );
+
+                if ( length != null )
                 {
-                    logger.error( "The URL is not valid {} : {}", remote, httpResponse.getStatusLine().getStatusCode() );
-                }
+                    downloadThreaded = true;
+                    remoteSize = Long.parseLong( length.getValue() );
 
-                Header acceptRange = httpResponse.getFirstHeader( HttpHeaders.ACCEPT_RANGES );
-
-                if ( acceptRange != null && acceptRange.getValue().equals( "bytes" ) )
-                {
-                    logger.debug( "Header will accept range queries" );
-
-                    Header length = httpResponse.getFirstHeader( HttpHeaders.CONTENT_LENGTH );
-
-                    if ( length != null )
+                    if ( logger.isDebugEnabled() )
                     {
-                        downloadThreaded = true;
-                        remoteSize = Long.parseLong( length.getValue() );
-
-                        if ( logger.isDebugEnabled() )
-                        {
-                            logger.debug( "Length of remote is {} ({})", ByteUtils.humanReadableByteCount( remoteSize ), remoteSize );
-                        }
+                        logger.debug( "Length of remote is {} ({})", ByteUtils.humanReadableByteCount( remoteSize ),
+                                      remoteSize );
                     }
                 }
                 else
                 {
-                    logger.debug( "Remote does not accept ranges" );
+                    logger.error( "Remote did not specify a range" );
+                    downloadThreaded = false;
                 }
             }
-            headMethod.releaseConnection();
+            else
+            {
+                logger.error( "Remote does not accept ranges" );
+                downloadThreaded = false;
+            }
         }
 
 
-        if ( downloadThreaded && remoteSize > 10000000 )
+        if ( !single && downloadThreaded && remoteSize > 10000000 )
         {
             long range = remoteSize / PART_COUNT;
 
-            CloseableHttpClient pooledClient = HttpClients.custom().setConnectionManager( cm ).build();
             // 1 extra than the number of splits for the writer thread.
-            ExecutorService service = Executors.newFixedThreadPool(PART_COUNT + 1);
-            HashSet<Future<PartCache>> parts = new HashSet<>(  );
+            ExecutorService service = Executors.newFixedThreadPool( PART_COUNT + 1 );
+            HashSet<Future<PartCache>> parts = new HashSet<>();
 
             targetFile = new RandomAccessFile( target, "rw" );
             // Pre-allocate the length to avoid repeated resize.
             targetFile.setLength( remoteSize );
 
-            for ( int i=1 ; i<=PART_COUNT; i++)
+            for ( int i = 1; i <= PART_COUNT; i++ )
             {
-                parts.add( service.submit( new PartExtractor( pooledClient, remote, remoteSize, range, i) ) );
+                parts.add( service.submit( new PartExtractor( pooledClient, remote, remoteSize, range, i ) ) );
             }
-            Future wFuture = service.submit( new Writer ( queue, targetFile ) );
+            Future wFuture = service.submit( new Writer( queue, targetFile ) );
 
             for ( Future<PartCache> f : parts )
             {
@@ -174,15 +178,15 @@ public class JDownloader
                 {
                     if ( e.getCause() instanceof IOException )
                     {
-                        throw (IOException)e.getCause();
+                        throw (IOException) e.getCause();
                     }
                     else if ( e.getCause() instanceof InternalException )
                     {
-                        throw (InternalException)e.getCause();
+                        throw (InternalException) e.getCause();
                     }
                     else if ( e.getCause() instanceof OutOfMemoryError )
                     {
-                        logger.error( "Caught OutOfMemory exception from PartExtractor", e);
+                        logger.error( "Caught OutOfMemory exception from PartExtractor", e );
 
                         // Terminate as fatal error.
                         service.shutdownNow();
@@ -206,13 +210,17 @@ public class JDownloader
             }
 
             service.shutdown();
-            pooledClient.close();
             targetFile.close();
         }
         else
         {
-            logger.info ("Downloading directly to {}", target);
-            FileUtils.copyURLToFile( url, new File( target ) );
+            logger.info( "Downloading directly to {}", target );
+            File fTarget = new File( target );
+            FileUtils.copyURLToFile( url, fTarget );
+            logger.info( "Completed writing {} ( {} bytes )", ByteUtils.humanReadableByteCount( fTarget.length() ),
+                         fTarget.length() );
         }
+
+        pooledClient.close();
     }
 }

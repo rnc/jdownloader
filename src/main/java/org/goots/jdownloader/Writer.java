@@ -23,8 +23,12 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
+
+import static java.nio.channels.FileChannel.MapMode.READ_WRITE;
 
 class Writer implements Callable<Object>
 {
@@ -50,8 +54,10 @@ class Writer implements Callable<Object>
         {
             PartCache part = queue.take();
 
+            byteCount += part.getCachedBytes().length;
+
             logger.debug( "Writing {} bytes ( total : {} bytes ) queue {} ", part.getCachedBytes().length,
-                          ( byteCount += part.getCachedBytes().length ), queue.size() );
+                          byteCount, queue.size() );
 
             // TODO: Determine which is quicker ; using RandomAccessFile or a MappedByteBuffer.
             // TODO: Reference https://rick-hightower.blogspot.com/2013/11/fastet-java-io-circa-2013-writing-large.html
@@ -61,10 +67,10 @@ class Writer implements Callable<Object>
             randomAccessFile.write( part.getCachedBytes() );
 
             // Another alternative is using channel write:
-            //   randomAccessFile.getChannel().write( ByteBuffer.wrap( part.getCachedBytes() ) );
+            // randomAccessFile.getChannel().write( ByteBuffer.wrap( part.getCachedBytes() ) );
 
-            // MappedByteBuffer buffer = randomAccessFile.getChannel().map( READ_WRITE, part.getIndex(), part.getCachedBytes().length );
-            // buffer.put( part.getCachedBytes() );
+            // randomAccessFile.getChannel().map( READ_WRITE, part.getIndex(), part.getCachedBytes().length ).put( part.getCachedBytes() );
+
 
             counter++;
         }
