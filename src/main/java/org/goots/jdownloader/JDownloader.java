@@ -46,7 +46,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class JDownloader
 {
-    final static int PART_COUNT = 1;
+    final static int PART_COUNT = 20;
 
     private final Logger logger = LoggerFactory.getLogger( JDownloader.class );
 
@@ -169,7 +169,7 @@ public class JDownloader
             }
             Future wFuture = service.submit( new Writer( queue, targetFile ) );
 
-            /*
+
             try
             {
                 parts.parallelStream().forEach( p -> {
@@ -208,7 +208,7 @@ public class JDownloader
                     throw new InternalException( "Caught exception from PartExtractor", e );
                 }
             }
-            */
+            /*
 
             for ( Future<PartCache> f : parts )
             {
@@ -241,10 +241,10 @@ public class JDownloader
                     }
                 }
             }
+            */
 
             while ( true )
             {
-                logger.debug( "### Looping to await done" );
                 // no-op
                 if ( wFuture.isDone() )
                 {
@@ -260,6 +260,7 @@ public class JDownloader
             logger.info( "Downloading directly to {}", target );
             File fTarget = new File( target );
             FileUtils.copyURLToFile( url, fTarget );
+
             logger.info( "Completed writing {} ( {} bytes )", ByteUtils.humanReadableByteCount( fTarget.length() ),
                          fTarget.length() );
         }

@@ -87,8 +87,6 @@ class PartExtractor implements Callable<PartCache>
         }
         finally
         {
-            logger.debug( "### Release connection" );
-
             get.releaseConnection();
         }
 
