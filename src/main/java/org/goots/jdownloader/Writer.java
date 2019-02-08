@@ -24,11 +24,9 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
-import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
-
-import static java.nio.channels.FileChannel.MapMode.READ_WRITE;
 
 class Writer implements Callable<Object>
 {
@@ -52,6 +50,8 @@ class Writer implements Callable<Object>
 
         do
         {
+            logger.debug( "### Waiting on part" );
+
             PartCache part = queue.take();
 
             byteCount += part.getCachedBytes().length;
@@ -63,14 +63,15 @@ class Writer implements Callable<Object>
             // TODO: Reference https://rick-hightower.blogspot.com/2013/11/fastet-java-io-circa-2013-writing-large.html
             // TODO: Reference https://mechanical-sympathy.blogspot.com/2011/12/java-sequential-io-performance.html
 
+            logger.debug( "### Writing to file and seeking to {} ", part.getIndex() );
+
             randomAccessFile.seek( part.getIndex() );
-            randomAccessFile.write( part.getCachedBytes() );
+            // randomAccessFile.write( part.getCachedBytes() );
 
             // Another alternative is using channel write:
             // randomAccessFile.getChannel().write( ByteBuffer.wrap( part.getCachedBytes() ) );
-
-            // randomAccessFile.getChannel().map( READ_WRITE, part.getIndex(), part.getCachedBytes().length ).put( part.getCachedBytes() );
-
+            // Another option
+            randomAccessFile.getChannel().map( FileChannel.MapMode.READ_WRITE, part.getIndex(), part.getCachedBytes().length ).put( part.getCachedBytes() );
 
             counter++;
         }

@@ -27,6 +27,7 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.goots.jdownloader.utils.ByteUtils;
 import org.goots.jdownloader.utils.InternalException;
+import org.goots.jdownloader.utils.InternalRuntimeException;
 import org.goots.jdownloader.utils.PartCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +46,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class JDownloader
 {
-    final static int PART_COUNT = 20;
+    final static int PART_COUNT = 1;
 
     private final Logger logger = LoggerFactory.getLogger( JDownloader.class );
 
@@ -168,6 +169,47 @@ public class JDownloader
             }
             Future wFuture = service.submit( new Writer( queue, targetFile ) );
 
+            /*
+            try
+            {
+                parts.parallelStream().forEach( p -> {
+                    try
+                    {
+                        queue.put( p.get() );
+                    }
+                    catch ( InterruptedException | ExecutionException e )
+                    {
+                        throw new InternalRuntimeException( "Stream error", e );
+                    }
+                } );
+            }
+            catch ( InternalRuntimeException e )
+            {
+                if ( e.getCause() instanceof IOException )
+                {
+                    throw (IOException) e.getCause();
+                }
+                else if ( e.getCause() instanceof InternalException )
+                {
+                    throw (InternalException) e.getCause();
+                }
+                else if ( e.getCause() instanceof OutOfMemoryError )
+                {
+                    logger.error( "Caught OutOfMemory exception from PartExtractor", e );
+
+                    // Terminate as fatal error.
+                    service.shutdownNow();
+
+                    throw new InternalException( "Fatal out of memory", e );
+                }
+                else
+                {
+                    logger.error( "Caught exception from PartExtractor", e );
+                    throw new InternalException( "Caught exception from PartExtractor", e );
+                }
+            }
+            */
+
             for ( Future<PartCache> f : parts )
             {
                 try
@@ -202,6 +244,7 @@ public class JDownloader
 
             while ( true )
             {
+                logger.debug( "### Looping to await done" );
                 // no-op
                 if ( wFuture.isDone() )
                 {
@@ -221,6 +264,7 @@ public class JDownloader
                          fTarget.length() );
         }
 
+        // TODO: Wrap in finally.
         pooledClient.close();
     }
 }

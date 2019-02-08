@@ -75,7 +75,7 @@ class PartExtractor implements Callable<PartCache>
                                                                      + " and length {}" + httpResponse.getEntity().getContentLength() );
                 }
 
-//                logger.debug( "### Part {} retrieved {} ", partIndex, httpResponse.getEntity().getContentLength() );
+                logger.debug( "### Part {} retrieved {} ", partIndex, httpResponse.getEntity().getContentLength() );
 
                 return new PartCache( EntityUtils.toByteArray( httpResponse.getEntity() ), from );
             } );
@@ -87,6 +87,8 @@ class PartExtractor implements Callable<PartCache>
         }
         finally
         {
+            logger.debug( "### Release connection" );
+
             get.releaseConnection();
         }
 
