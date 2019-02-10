@@ -27,7 +27,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.contrib.java.lang.system.SystemOutRule;
 import org.junit.rules.TemporaryFolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,9 +47,6 @@ public class SimulatedDownloadTest
     @Rule
     public final TemporaryFolder folder = new TemporaryFolder(  );
 
-    @Rule
-    public final SystemOutRule systemRule = new SystemOutRule().enableLog(); //.muteForSuccessfulTests();
-
     private static Server server;
 
     @Before
@@ -68,7 +64,6 @@ public class SimulatedDownloadTest
         // Setup the basic application "context" for this application at "/"
         // This is also known as the handler tree (in jetty speak)
         ServletContextHandler context = new ServletContextHandler( ServletContextHandler.SESSIONS );
-//        context.setResourceBase( System.getProperty( "user.dir" ) + "/rhdm-7.2.0-container-sources.zip" );
         context.setResourceBase( original.getAbsolutePath() );
         context.setContextPath( "/" );
         server.setHandler( context );
@@ -98,7 +93,7 @@ public class SimulatedDownloadTest
         {
             final URL source = server.getURI().toURL();
             final File target = folder.newFile();
-            final int COUNT = 2;
+            final int COUNT = 3;
             final List<Long> results = new ArrayList<>();
 
             logger.warn( "Attempt to download from {} ", source );
@@ -106,11 +101,11 @@ public class SimulatedDownloadTest
             for ( int i = 0; i < COUNT; i++ )
             {
                 long start = System.nanoTime();
-                new JDownloader( source.toString() ).single( true ).target( target.getAbsolutePath() ).execute();
+                new JDownloader( source.toString() ).minimumSplit( 0).target( target.getAbsolutePath() ).execute();
                 results.add( System.nanoTime() - start );
             }
 
-            long directResult = TimeUnit.NANOSECONDS.toMillis( results.stream().mapToLong( Long::longValue ).sum() / COUNT );
+            long directResult = TimeUnit.NANOSECONDS.toMillis( results.stream().max( Long::compareTo ).get() );
             logger.warn( "Single took {} milliseconds with results {} ",
                          directResult, results.stream().map( TimeUnit.NANOSECONDS::toMillis ).collect( Collectors.toList() ) );
 
@@ -123,7 +118,7 @@ public class SimulatedDownloadTest
                 results.add( System.nanoTime() - start );
             }
 
-            long result = TimeUnit.NANOSECONDS.toMillis( results.stream().mapToLong( Long::longValue ).sum() / COUNT );
+            long result = TimeUnit.NANOSECONDS.toMillis( results.stream().max( Long::compareTo ).get() );
             logger.warn( "Multithreaded took {} milliseconds with results {} ",
                          result, results.stream().map( TimeUnit.NANOSECONDS::toMillis ).collect( Collectors.toList() ) );
 

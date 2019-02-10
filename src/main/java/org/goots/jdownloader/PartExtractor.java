@@ -43,14 +43,14 @@ class PartExtractor implements Callable<PartCache>
 
     private long to;
 
-    PartExtractor( CloseableHttpClient remoteClient, String url, long remoteSize, long range, int partIndex )
+    PartExtractor( CloseableHttpClient remoteClient, int partCount, String url, long remoteSize, long range, int partIndex )
     {
         this.remoteClient = remoteClient;
         this.url = url;
         this.partIndex = partIndex;
 
         from = partIndex == 1 ? 0 : ( ( ( partIndex - 1 ) * range) + 1) ;
-        to = partIndex == (long) JDownloader.PART_COUNT ?
+        to = partIndex == (long) partCount ?
                         // https://tools.ietf.org/html/rfc7233#page-5 range is inclusive so add 1
                         ( remoteSize + 1 ) :
                         ( partIndex * range );
@@ -75,7 +75,7 @@ class PartExtractor implements Callable<PartCache>
                                                                      + " and length {}" + httpResponse.getEntity().getContentLength() );
                 }
 
-                logger.debug( "### Part {} retrieved {} ", partIndex, httpResponse.getEntity().getContentLength() );
+//                logger.debug( "### Part {} retrieved {} ", partIndex, httpResponse.getEntity().getContentLength() );
 
                 return new PartCache( EntityUtils.toByteArray( httpResponse.getEntity() ), from );
             } );

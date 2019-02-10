@@ -23,7 +23,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
@@ -36,8 +35,11 @@ class Writer implements Callable<Object>
 
     private final RandomAccessFile randomAccessFile;
 
-    Writer( BlockingQueue<PartCache> queue, RandomAccessFile file )
+    private final int partCount;
+
+    Writer( int partCount, BlockingQueue<PartCache> queue, RandomAccessFile file )
     {
+        this.partCount = partCount;
         this.queue = queue;
         this.randomAccessFile = file;
     }
@@ -50,8 +52,6 @@ class Writer implements Callable<Object>
 
         do
         {
-            logger.debug( "### Waiting on part" );
-
             PartCache part = queue.take();
 
             byteCount += part.getCachedBytes().length;
@@ -59,25 +59,19 @@ class Writer implements Callable<Object>
             logger.debug( "Writing {} bytes ( total : {} bytes ) queue {} ", part.getCachedBytes().length,
                           byteCount, queue.size() );
 
-            // TODO: Determine which is quicker ; using RandomAccessFile or a MappedByteBuffer.
-            // TODO: Reference https://rick-hightower.blogspot.com/2013/11/fastet-java-io-circa-2013-writing-large.html
-            // TODO: Reference https://mechanical-sympathy.blogspot.com/2011/12/java-sequential-io-performance.html
-
-            logger.debug( "### Writing to file and seeking to {} ", part.getIndex() );
-
             randomAccessFile.seek( part.getIndex() );
+            // Options for writing to file...
             // randomAccessFile.write( part.getCachedBytes() );
-
             // Another alternative is using channel write:
             // randomAccessFile.getChannel().write( ByteBuffer.wrap( part.getCachedBytes() ) );
-            // Another option
+
             randomAccessFile.getChannel().map( FileChannel.MapMode.READ_WRITE, part.getIndex(), part.getCachedBytes().length ).put( part.getCachedBytes() );
 
             counter++;
         }
         // We know that there are X extractors so keep track of how many writes are done and exit when
         // its complete.
-        while ( counter < JDownloader.PART_COUNT );
+        while ( counter < partCount );
 
         logger.info( "Completed writing {} ( {} bytes )", ByteUtils.humanReadableByteCount( byteCount ), byteCount );
 

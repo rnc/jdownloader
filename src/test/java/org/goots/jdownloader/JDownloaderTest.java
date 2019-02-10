@@ -17,6 +17,7 @@
 package org.goots.jdownloader;
 
 import org.apache.commons.io.FileUtils;
+import org.goots.jdownloader.utils.InternalException;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.contrib.java.lang.system.SystemOutRule;
@@ -45,7 +46,7 @@ public class JDownloaderTest
 
         File target = folder.newFile();
 
-        new JDownloader(source.toString() ).target( target.getAbsolutePath() ).execute();
+        new JDownloader( source.toString() ).target( target.getAbsolutePath() ).execute();
 
         assertTrue ( FileUtils.contentEquals( original, target ) );
     }
@@ -110,5 +111,11 @@ public class JDownloaderTest
         {
             target.deleteOnExit();
         }
+    }
+
+    @Test(expected = InternalException.class )
+    public void verifyErrorHandling1() throws Exception
+    {
+        new JDownloader( "" ).execute();
     }
 }
