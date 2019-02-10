@@ -27,6 +27,7 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.goots.jdownloader.utils.ByteUtils;
 import org.goots.jdownloader.utils.InternalException;
+import org.goots.jdownloader.utils.InternalRuntimeException;
 import org.goots.jdownloader.utils.PartCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,9 +46,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class JDownloader
 {
-    final static int PART_COUNT = 20;
+    static final int SPLIT_DEFAULT = 10000000;
 
     private final Logger logger = LoggerFactory.getLogger( JDownloader.class );
+
+    private int partCount = Runtime.getRuntime().availableProcessors();
 
     private String remote;
 
@@ -55,17 +58,23 @@ public class JDownloader
 
     private PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
 
-    private BlockingQueue<PartCache> queue = new LinkedBlockingQueue<>( PART_COUNT );
+    private BlockingQueue<PartCache> queue = new LinkedBlockingQueue<>( partCount );
 
-    private boolean single;
+    private int minimumSplit = SPLIT_DEFAULT;
 
-    public JDownloader ( String remote )
+    public JDownloader ( String remote ) throws InternalException
     {
         this.remote = remote;
+
+        if ( remote == null || remote.length() == 0 )
+        {
+            throw new InternalException( "No remote specified" );
+        }
+
         // Slightly smaller connection pool than the split count ; this ensures we don't
         // cache the entire file in memory at once but stagger it slightly.
-        cm.setDefaultMaxPerRoute( PART_COUNT - (int)( PART_COUNT * 0.15 ) );
-        cm.setMaxTotal( PART_COUNT * 10 );
+        cm.setDefaultMaxPerRoute( partCount - (int)( partCount * 0.15 ) );
+        cm.setMaxTotal( partCount * 10 );
     }
 
     /**
@@ -73,16 +82,36 @@ public class JDownloader
      * working directory and final filename of remote.
      * @param target the target filename.
      * @return this object.
+     * @throws InternalException if target is invalid
      */
-    public JDownloader target( String target )
+    public JDownloader target( String target ) throws InternalException
     {
         this.target = target;
+
         return this;
     }
 
-    public JDownloader single( boolean single )
+    /**
+     * Define the minimum split before using multi-threading. Default is 100000 (10MB).
+     * Set to &lt;= 0 to force single threaded direct download.
+     * @param minimumSplit the split in bytes
+     * @return this object
+     */
+    public JDownloader minimumSplit( int minimumSplit )
     {
-        this.single = single;
+        this.minimumSplit = minimumSplit;
+        return this;
+    }
+
+    /**
+     * Defines the number of parts the remote file will be split into when using multi-threading.
+     * Defaults to number of processors.
+     * @param partCount number of parts.
+     * @return this object
+     */
+    public JDownloader partCount( int partCount )
+    {
+        this.partCount = partCount;
         return this;
     }
 
@@ -99,94 +128,106 @@ public class JDownloader
         RandomAccessFile targetFile;
 
         // If target hasn't been set the default it to the filename portion of the original file
-        if ( target == null )
+        if ( target == null || target.length() == 0 )
         {
             target = FilenameUtils.getName( url.getFile() );
         }
 
-        // Head parser
-        HttpHead headMethod = new HttpHead( remote );
-        boolean downloadThreaded = single;
-
-        if ( ! downloadThreaded )
+        try ( CloseableHttpClient pooledClient = HttpClients.custom().setConnectionManager( cm ).build() )
         {
-            try (CloseableHttpClient httpClient = HttpClients.createDefault(); CloseableHttpResponse httpResponse = httpClient.execute( headMethod ))
+            // Head parser
+            HttpHead headMethod = new HttpHead( remote );
+            boolean downloadThreaded = false;
+
+            if ( minimumSplit > 0 )
             {
-                if ( httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_OK )
+                try ( CloseableHttpResponse httpResponse = pooledClient.execute( headMethod ) )
                 {
-                    logger.error( "The URL is not valid {} : {}", remote, httpResponse.getStatusLine().getStatusCode() );
-                }
-
-                Header acceptRange = httpResponse.getFirstHeader( HttpHeaders.ACCEPT_RANGES );
-
-                if ( acceptRange != null && acceptRange.getValue().equals( "bytes" ) )
-                {
-                    logger.debug( "Header will accept range queries" );
-
-                    Header length = httpResponse.getFirstHeader( HttpHeaders.CONTENT_LENGTH );
-
-                    if ( length != null )
+                    if ( httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_OK )
                     {
-                        downloadThreaded = true;
-                        remoteSize = Long.parseLong( length.getValue() );
+                        logger.error( "The URL is not valid {} : {}", remote, httpResponse.getStatusLine().getStatusCode() );
+                    }
 
-                        if ( logger.isDebugEnabled() )
+                    Header acceptRange = httpResponse.getFirstHeader( HttpHeaders.ACCEPT_RANGES );
+
+                    if ( acceptRange != null && acceptRange.getValue().equals( "bytes" ) )
+                    {
+                        logger.debug( "Header will accept range queries" );
+
+                        Header length = httpResponse.getFirstHeader( HttpHeaders.CONTENT_LENGTH );
+
+                        if ( length != null )
                         {
-                            logger.debug( "Length of remote is {} ({})", ByteUtils.humanReadableByteCount( remoteSize ), remoteSize );
+                            downloadThreaded = true;
+                            remoteSize = Long.parseLong( length.getValue() );
+
+                            if ( logger.isDebugEnabled() )
+                            {
+                                logger.debug( "Length of remote is {} ({})", ByteUtils.humanReadableByteCount( remoteSize ),
+                                              remoteSize );
+                            }
+                        }
+                        else
+                        {
+                            logger.error( "Remote did not specify a range" );
                         }
                     }
+                    else
+                    {
+                        logger.error( "Remote does not accept ranges" );
+                    }
                 }
-                else
+            }
+
+            if ( downloadThreaded && remoteSize > minimumSplit )
+            {
+                long range = remoteSize / partCount;
+
+                // 1 extra than the number of splits for the writer thread.
+                ExecutorService service = Executors.newFixedThreadPool( partCount + 1 );
+                HashSet<Future<PartCache>> parts = new HashSet<>();
+
+                targetFile = new RandomAccessFile( target, "rw" );
+                // Pre-allocate the length to avoid repeated resize.
+                targetFile.setLength( remoteSize );
+
+                for ( int i = 1; i <= partCount; i++ )
                 {
-                    logger.debug( "Remote does not accept ranges" );
+                    parts.add( service.submit( new PartExtractor( pooledClient, partCount, remote, remoteSize, range, i ) ) );
                 }
-            }
-            headMethod.releaseConnection();
-        }
+                Future wFuture = service.submit( new Writer( partCount, queue, targetFile ) );
 
-
-        if ( downloadThreaded && remoteSize > 10000000 )
-        {
-            long range = remoteSize / PART_COUNT;
-
-            CloseableHttpClient pooledClient = HttpClients.custom().setConnectionManager( cm ).build();
-            // 1 extra than the number of splits for the writer thread.
-            ExecutorService service = Executors.newFixedThreadPool(PART_COUNT + 1);
-            HashSet<Future<PartCache>> parts = new HashSet<>(  );
-
-            targetFile = new RandomAccessFile( target, "rw" );
-            // Pre-allocate the length to avoid repeated resize.
-            targetFile.setLength( remoteSize );
-
-            for ( int i=1 ; i<=PART_COUNT; i++)
-            {
-                parts.add( service.submit( new PartExtractor( pooledClient, remote, remoteSize, range, i) ) );
-            }
-            Future wFuture = service.submit( new Writer ( queue, targetFile ) );
-
-            for ( Future<PartCache> f : parts )
-            {
                 try
                 {
-                    queue.put( f.get() );
+                    parts.parallelStream().forEach( p -> {
+                        try
+                        {
+                            queue.put( p.get() );
+                        }
+                        catch ( InterruptedException | ExecutionException e )
+                        {
+                            throw new InternalRuntimeException( "Stream error", e );
+                        }
+                    } );
                 }
-                catch ( InterruptedException | ExecutionException e )
+                catch ( InternalRuntimeException e )
                 {
                     if ( e.getCause() instanceof IOException )
                     {
-                        throw (IOException)e.getCause();
+                        throw (IOException) e.getCause();
                     }
                     else if ( e.getCause() instanceof InternalException )
                     {
-                        throw (InternalException)e.getCause();
+                        throw (InternalException) e.getCause();
                     }
                     else if ( e.getCause() instanceof OutOfMemoryError )
                     {
-                        logger.error( "Caught OutOfMemory exception from PartExtractor", e);
+                        logger.error( "Caught OutOfMemory exception from PartExtractor", e );
 
                         // Terminate as fatal error.
                         service.shutdownNow();
-                        break;
+
+                        throw new InternalException( "Fatal out of memory", e );
                     }
                     else
                     {
@@ -194,25 +235,28 @@ public class JDownloader
                         throw new InternalException( "Caught exception from PartExtractor", e );
                     }
                 }
-            }
 
-            while ( true )
-            {
-                // no-op
-                if ( wFuture.isDone() )
+                while ( true )
                 {
-                    break;
+                    // no-op
+                    if ( wFuture.isDone() )
+                    {
+                        break;
+                    }
                 }
-            }
 
-            service.shutdown();
-            pooledClient.close();
-            targetFile.close();
-        }
-        else
-        {
-            logger.info ("Downloading directly to {}", target);
-            FileUtils.copyURLToFile( url, new File( target ) );
+                service.shutdown();
+                targetFile.close();
+            }
+            else
+            {
+                logger.info( "Downloading directly to {}", target );
+                File fTarget = new File( target );
+                FileUtils.copyURLToFile( url, fTarget );
+
+                logger.info( "Completed writing {} ( {} bytes )", ByteUtils.humanReadableByteCount( fTarget.length() ),
+                             fTarget.length() );
+            }
         }
     }
 }

@@ -16,7 +16,6 @@
 package org.goots.jdownloader;
 
 import ch.qos.logback.classic.Level;
-import org.goots.jdownloader.utils.InternalException;
 import org.goots.jdownloader.utils.ManifestVersionProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +24,8 @@ import picocli.CommandLine.Option;
 
 import java.util.List;
 import java.util.concurrent.Callable;
+
+import static org.goots.jdownloader.JDownloader.SPLIT_DEFAULT;
 
 @CommandLine.Command( name = "JDownloader",
                       description = "Multithreaded Java JDownloader",
@@ -42,11 +43,11 @@ public class Main implements Callable<Void>
     @Option( names = { "--out" }, paramLabel = "Output", description = "Local file" )
     private String target;
 
-    // TODO: Should we keep this option exposed?
-    // TODO: Should we instead configure limit between single thread and multi ? (currently 10MB)
-    // TODO: Theoretically we could have something like -x == always single , >= value y means multple on that value
-    @Option( names = { "-s" }, paramLabel = "Single-Thread", description = "Force single thread" )
-    private boolean single;
+    @Option( names = { "-p" }, paramLabel = "Part-Count", description = "Number of parts to split into (default: ${DEFAULT-VALUE})")
+    private int partCount = Runtime.getRuntime().availableProcessors();
+
+    @Option( names = { "-s" }, paramLabel = "Size", description = "Minimum size in bytes to multi-thread (default: ${DEFAULT-VALUE}). Set to <= 0 to force single thread." )
+    private int minimumSplit = SPLIT_DEFAULT;
 
     public static void main( String[] args ) throws Exception
     {
@@ -55,11 +56,6 @@ public class Main implements Callable<Void>
         {
             CommandLine cl = new CommandLine( new Main() );
             cl.parseWithHandlers( new CommandLine.RunAll(), handler, args );
-
-            if ( handler.parseException )
-            {
-                throw new InternalException( "Command line parse exception" );
-            }
         }
         catch ( CommandLine.ExecutionException e )
         {
@@ -85,7 +81,7 @@ public class Main implements Callable<Void>
             enableDebug();
         }
 
-        new JDownloader( remote ).target( target ).single( single ).execute();
+        new JDownloader( remote ).target( target ).partCount( partCount ).minimumSplit( minimumSplit ).execute();
 
         return null;
     }
@@ -101,8 +97,6 @@ public class Main implements Callable<Void>
     private static class ExceptionHandler<R>
                     extends CommandLine.DefaultExceptionHandler<R>
     {
-        private boolean parseException;
-
         /**
          * Prints the message of the specified exception, followed by the usage message for the command or subcommand
          * whose input was invalid, to the stream returned by {@link #err()}.
@@ -113,9 +107,9 @@ public class Main implements Callable<Void>
          * @since 3.0 */
         public R handleParseException( CommandLine.ParameterException ex, String[] args )
         {
-            parseException = true;
             super.handleParseException( ex, args );
-            return super.returnResultOrExit( null );
+            andExit( 1 );
+            return returnResultOrExit( null );
         }
     }
 }
