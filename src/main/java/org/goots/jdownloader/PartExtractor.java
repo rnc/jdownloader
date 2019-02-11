@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.concurrent.Callable;
 
 class PartExtractor implements Callable<PartCache>
@@ -37,13 +38,13 @@ class PartExtractor implements Callable<PartCache>
 
     private final CloseableHttpClient remoteClient;
 
-    private final String url;
+    private final URI url;
 
     private long from;
 
     private long to;
 
-    PartExtractor( CloseableHttpClient remoteClient, int partCount, String url, long remoteSize, long range, int partIndex )
+    PartExtractor( CloseableHttpClient remoteClient, int partCount, URI url, long remoteSize, long range, int partIndex )
     {
         this.remoteClient = remoteClient;
         this.url = url;

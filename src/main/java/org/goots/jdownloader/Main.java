@@ -44,7 +44,7 @@ public class Main implements Callable<Void>
     private String target;
 
     @Option( names = { "-p" }, paramLabel = "Part-Count", description = "Number of parts to split into (default: ${DEFAULT-VALUE})")
-    private int partCount = Runtime.getRuntime().availableProcessors();
+    private int partCount = Runtime.getRuntime().availableProcessors() < 4 ? 4 : Runtime.getRuntime().availableProcessors();
 
     @Option( names = { "-s" }, paramLabel = "Size", description = "Minimum size in bytes to multi-thread (default: ${DEFAULT-VALUE}). Set to <= 0 to force single thread." )
     private int minimumSplit = SPLIT_DEFAULT;

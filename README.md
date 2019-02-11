@@ -24,14 +24,19 @@ Alternatively it may be used as a library. It supports builder style composition
 ```
 new JDownloader( <url> ).target( <file> ).execute();
 ```
+<br/>
 
-The remote URL passed to the constructor is mandatory.
+| Constructor | Description |
+| --- | --- |
+| JDownloader ( String ) | String to remote URL |
+| JDownloader (URL ) | URL to remote URL |
+
 
 | Method | Description |
 | --- | --- |
 | void execute() | Computes a result, or throws an exception if unable to do so. |
 | JDownloader minimumSplit(int minimumSplit) | Define the minimum split before using multi-threading. Default is 100000 (10MB). Set to <= 0 to force single threaded direct download. |
-| JDownloader 	partCount(int partCount) | Defines the number of parts the remote file will be split into when using multi-threading. Defaults to number of processors. |
+| JDownloader 	partCount(int partCount) | Defines the number of parts the remote file will be split into when using multi-threading. Defaults to number of processors or 4 whichever is greater.
 | JDownloader 	target(String target) | Define target file to write to. Optional, if not set, then it will default to working directory and final filename of remote.|
 
 
