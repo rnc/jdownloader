@@ -24,6 +24,7 @@ import org.junit.contrib.java.lang.system.SystemOutRule;
 import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
 
 import static junit.framework.TestCase.assertTrue;
@@ -74,7 +75,7 @@ public class JDownloaderTest
     }
 
     @Test
-    public void verifyContents() throws Exception
+    public void verifyContents1() throws Exception
     {
         URL source = new URL("http://central.maven.org/maven2/org/commonjava/maven/ext/pom-manipulation-cli/3.3.1/pom-manipulation-cli-3.3.1.jar" );
 
@@ -88,6 +89,50 @@ public class JDownloaderTest
 
         assertTrue ( FileUtils.contentEquals( original, target ) );
         assertTrue( systemRule.getLog().contains( "Completed writing" ) );
+    }
+
+    @Test
+    public void verifyContents2() throws Exception
+    {
+        URL source = new URL("http://central.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar" );
+
+        File original = folder.newFile();
+        FileUtils.copyURLToFile(source, original );
+
+        File target = folder.newFile();
+
+        new Main().enableDebug();
+        new JDownloader( source.toString() ).target( target.getAbsolutePath() ).minimumSplit( 1 ).execute();
+
+        assertTrue ( FileUtils.contentEquals( original, target ) );
+        assertTrue( systemRule.getLog().contains( "Completed writing" ) );
+    }
+
+    @Test
+    public void verifyContents3() throws Exception
+    {
+        URL source = new URL("http://central.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar" );
+
+        File original = folder.newFile();
+        FileUtils.copyURLToFile(source, original );
+
+        File target = folder.newFile();
+
+        new Main().enableDebug();
+        new JDownloader( source ).target( target.getAbsolutePath() ).minimumSplit( 1 ).execute();
+
+        assertTrue ( FileUtils.contentEquals( original, target ) );
+        assertTrue( systemRule.getLog().contains( "Completed writing" ) );
+    }
+
+    @Test ( expected = IOException.class )
+    public void verifyContents4() throws Exception
+    {
+        URL source = new URL("http://127.0.01/foo.jar" );
+
+        File target = folder.newFile();
+
+        new JDownloader( source ).target( target.getAbsolutePath() ).minimumSplit( 1 ).execute();
     }
 
     @Test

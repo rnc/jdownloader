@@ -35,6 +35,8 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.HashSet;
 import java.util.concurrent.BlockingQueue;
@@ -46,14 +48,15 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class JDownloader
 {
+    // Default of 10MB
     static final int SPLIT_DEFAULT = 10000000;
 
     private final Logger logger = LoggerFactory.getLogger( JDownloader.class );
 
-    private int partCount = Runtime.getRuntime().availableProcessors();
+    private int partCount = Runtime.getRuntime().availableProcessors() < 4 ? 4 : Runtime.getRuntime().availableProcessors();
 
-    private String remote;
-
+    private URL remote;
+ 
     private String target;
 
     private PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
@@ -62,14 +65,29 @@ public class JDownloader
 
     private int minimumSplit = SPLIT_DEFAULT;
 
-    public JDownloader ( String remote ) throws InternalException
+    public JDownloader ( String remote ) throws InternalException, IOException
     {
-        this.remote = remote;
-
         if ( remote == null || remote.length() == 0 )
         {
             throw new InternalException( "No remote specified" );
         }
+
+        this.remote = new URL ( remote );
+
+        // Slightly smaller connection pool than the split count ; this ensures we don't
+        // cache the entire file in memory at once but stagger it slightly.
+        cm.setDefaultMaxPerRoute( partCount - (int)( partCount * 0.15 ) );
+        cm.setMaxTotal( partCount * 10 );
+    }
+
+    public JDownloader ( URL remote ) throws InternalException
+    {
+        if ( remote == null )
+        {
+            throw new InternalException( "No remote specified" );
+        }
+
+        this.remote = remote;
 
         // Slightly smaller connection pool than the split count ; this ensures we don't
         // cache the entire file in memory at once but stagger it slightly.
@@ -82,9 +100,8 @@ public class JDownloader
      * working directory and final filename of remote.
      * @param target the target filename.
      * @return this object.
-     * @throws InternalException if target is invalid
      */
-    public JDownloader target( String target ) throws InternalException
+    public JDownloader target( String target )
     {
         this.target = target;
 
@@ -120,27 +137,29 @@ public class JDownloader
      *
      * @throws InternalException if unable to compute a result
      * @throws IOException if unable to compute a result
+     * @throws URISyntaxException if unable to compute a result
      */
-    public void execute() throws InternalException, IOException
+    public void execute() throws InternalException, IOException, URISyntaxException
     {
-        URL url = new URL( remote );
         long remoteSize = 0;
         RandomAccessFile targetFile;
 
         // If target hasn't been set the default it to the filename portion of the original file
         if ( target == null || target.length() == 0 )
         {
-            target = FilenameUtils.getName( url.getFile() );
+            target = FilenameUtils.getName( remote.getFile() );
         }
 
         try ( CloseableHttpClient pooledClient = HttpClients.custom().setConnectionManager( cm ).build() )
         {
-            // Head parser
-            HttpHead headMethod = new HttpHead( remote );
             boolean downloadThreaded = false;
+            final URI remoteURI = remote.toURI();
 
             if ( minimumSplit > 0 )
             {
+                // Head parser
+                HttpHead headMethod = new HttpHead( remoteURI );
+
                 try ( CloseableHttpResponse httpResponse = pooledClient.execute( headMethod ) )
                 {
                     if ( httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_OK )
@@ -193,7 +212,7 @@ public class JDownloader
 
                 for ( int i = 1; i <= partCount; i++ )
                 {
-                    parts.add( service.submit( new PartExtractor( pooledClient, partCount, remote, remoteSize, range, i ) ) );
+                    parts.add( service.submit( new PartExtractor( pooledClient, partCount, remoteURI, remoteSize, range, i ) ) );
                 }
                 Future wFuture = service.submit( new Writer( partCount, queue, targetFile ) );
 
@@ -252,7 +271,7 @@ public class JDownloader
             {
                 logger.info( "Downloading directly to {}", target );
                 File fTarget = new File( target );
-                FileUtils.copyURLToFile( url, fTarget );
+                FileUtils.copyURLToFile( remote, fTarget );
 
                 logger.info( "Completed writing {} ( {} bytes )", ByteUtils.humanReadableByteCount( fTarget.length() ),
                              fTarget.length() );
