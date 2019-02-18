@@ -56,7 +56,7 @@ public class JDownloader
     private int partCount = Runtime.getRuntime().availableProcessors() < 4 ? 4 : Runtime.getRuntime().availableProcessors();
 
     private URL remote;
- 
+
     private String target;
 
     private PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
@@ -149,6 +149,8 @@ public class JDownloader
         {
             target = FilenameUtils.getName( remote.getFile() );
         }
+
+        logger.info( "Downloading {} to {}", remote, target );
 
         try ( CloseableHttpClient pooledClient = HttpClients.custom().setConnectionManager( cm ).build() )
         {
@@ -269,7 +271,6 @@ public class JDownloader
             }
             else
             {
-                logger.info( "Downloading directly to {}", target );
                 File fTarget = new File( target );
                 FileUtils.copyURLToFile( remote, fTarget );
 
