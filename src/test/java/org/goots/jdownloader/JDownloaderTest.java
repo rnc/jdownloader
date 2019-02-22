@@ -52,6 +52,16 @@ public class JDownloaderTest
         assertTrue ( FileUtils.contentEquals( original, target ) );
     }
 
+    @Test(expected = InternalException.class)
+    public void verifyInvalidURL() throws Exception
+    {
+        URL source = new URL("http://central.maven.org/maven2/dummy-url/dummy-url-1.0.jar");
+
+        File target = folder.newFile();
+
+        new JDownloader( source ).target( target.getAbsolutePath() ).execute();
+    }
+
     @Test
     public void verifyContentsImplicitTargetDirect() throws Exception
     {

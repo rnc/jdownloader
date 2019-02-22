@@ -166,36 +166,39 @@ public class JDownloader
                 {
                     if ( httpResponse.getStatusLine().getStatusCode() != HttpStatus.SC_OK )
                     {
-                        logger.error( "The URL is not valid {} : {}", remote, httpResponse.getStatusLine().getStatusCode() );
+                        throw new InternalException( "Invalid URL (" + remote + ") ; received response: " +
+                                                                     httpResponse.getStatusLine().toString() );
                     }
-
-                    Header acceptRange = httpResponse.getFirstHeader( HttpHeaders.ACCEPT_RANGES );
-
-                    if ( acceptRange != null && acceptRange.getValue().equals( "bytes" ) )
+                    else
                     {
-                        logger.debug( "Header will accept range queries" );
+                        Header acceptRange = httpResponse.getFirstHeader( HttpHeaders.ACCEPT_RANGES );
 
-                        Header length = httpResponse.getFirstHeader( HttpHeaders.CONTENT_LENGTH );
-
-                        if ( length != null )
+                        if ( acceptRange != null && acceptRange.getValue().equals( "bytes" ) )
                         {
-                            downloadThreaded = true;
-                            remoteSize = Long.parseLong( length.getValue() );
+                            logger.debug( "Header will accept range queries" );
 
-                            if ( logger.isDebugEnabled() )
+                            Header length = httpResponse.getFirstHeader( HttpHeaders.CONTENT_LENGTH );
+
+                            if ( length != null )
                             {
-                                logger.debug( "Length of remote is {} ({})", ByteUtils.humanReadableByteCount( remoteSize ),
-                                              remoteSize );
+                                downloadThreaded = true;
+                                remoteSize = Long.parseLong( length.getValue() );
+
+                                if ( logger.isDebugEnabled() )
+                                {
+                                    logger.debug( "Length of remote is {} ({})", ByteUtils.humanReadableByteCount( remoteSize ),
+                                                  remoteSize );
+                                }
+                            }
+                            else
+                            {
+                                logger.error( "Remote did not specify a range" );
                             }
                         }
                         else
                         {
-                            logger.error( "Remote did not specify a range" );
+                            logger.error( "Remote does not accept ranges" );
                         }
-                    }
-                    else
-                    {
-                        logger.error( "Remote does not accept ranges" );
                     }
                 }
             }
