@@ -27,7 +27,7 @@
 
   <groupId>org.goots</groupId>
   <artifactId>jdownloader</artifactId>
-  <version>0.3-SNAPSHOT</version>
+  <version>0.3</version>
 
   <name>Multithreaded File Downloader</name>
   <inceptionYear>2019</inceptionYear>
@@ -51,7 +51,7 @@
     <connection>scm:git:https://github.com/rnc/jdownloader.git</connection>
     <developerConnection>scm:git:git@github.com:rnc/jdownloader.git</developerConnection>
     <url>http://github.com/rnc/jdownloader</url>
-    <tag>HEAD</tag>
+    <tag>jdownloader-0.3</tag>
   </scm>
 
 
