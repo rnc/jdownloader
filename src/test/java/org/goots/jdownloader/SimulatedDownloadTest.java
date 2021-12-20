@@ -71,8 +71,8 @@ public class SimulatedDownloadTest
 
         ServletHolder holderPwd = new ServletHolder( "default", DefaultServlet.class );
         holderPwd.setInitParameter( "dirAllowed", "true" );
+        holderPwd.setInitParameter("cacheControl","max-age=0,public");
         context.addServlet( holderPwd, "/" );
-
         server.start();
     }
 
