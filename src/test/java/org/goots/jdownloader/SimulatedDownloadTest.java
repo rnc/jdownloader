@@ -57,7 +57,8 @@ public class SimulatedDownloadTest
         connector.setPort( 8080 );
         server.addConnector( connector );
 
-        URL source = new URL( "http://central.maven.org/maven2/org/commonjava/maven/ext/pom-manipulation-cli/3.3.1/pom-manipulation-cli-3.3.1.jar" );
+        URL source = new URL( "https://repo1.maven.org/maven2/org/commonjava/maven/ext/pom-manipulation-cli/3.3"
+                                              + ".1/pom-manipulation-cli-3.3.1.jar" );
         File original = folder.newFile();
         FileUtils.copyURLToFile( source, original );
 
