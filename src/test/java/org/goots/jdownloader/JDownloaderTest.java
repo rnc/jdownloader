@@ -40,7 +40,7 @@ public class JDownloaderTest
     @Test
     public void verifyContentsDirect() throws Exception
     {
-        URL source = new URL("http://central.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar");
+        URL source = new URL("https://repo1.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar");
 
         File original = folder.newFile();
         FileUtils.copyURLToFile(source, original );
@@ -55,7 +55,7 @@ public class JDownloaderTest
     @Test(expected = InternalException.class)
     public void verifyInvalidURL() throws Exception
     {
-        URL source = new URL("http://central.maven.org/maven2/dummy-url/dummy-url-1.0.jar");
+        URL source = new URL("https://repo1.maven.org/maven2/dummy-url/dummy-url-1.0.jar");
 
         File target = folder.newFile();
 
@@ -65,7 +65,7 @@ public class JDownloaderTest
     @Test
     public void verifyContentsImplicitTargetDirect() throws Exception
     {
-        URL source = new URL("http://central.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar");
+        URL source = new URL("https://repo1.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar");
 
         File original = folder.newFile();
         FileUtils.copyURLToFile(source, original );
@@ -87,7 +87,7 @@ public class JDownloaderTest
     @Test
     public void verifyContents1() throws Exception
     {
-        URL source = new URL("http://central.maven.org/maven2/org/commonjava/maven/ext/pom-manipulation-cli/3.3.1/pom-manipulation-cli-3.3.1.jar" );
+        URL source = new URL("https://repo1.maven.org/maven2/org/commonjava/maven/ext/pom-manipulation-cli/3.3.1/pom-manipulation-cli-3.3.1.jar" );
 
         File original = folder.newFile();
         FileUtils.copyURLToFile(source, original );
@@ -104,7 +104,7 @@ public class JDownloaderTest
     @Test
     public void verifyContents2() throws Exception
     {
-        URL source = new URL("http://central.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar" );
+        URL source = new URL("https://repo1.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar" );
 
         File original = folder.newFile();
         FileUtils.copyURLToFile(source, original );
@@ -121,7 +121,7 @@ public class JDownloaderTest
     @Test
     public void verifyContents3() throws Exception
     {
-        URL source = new URL("http://central.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar" );
+        URL source = new URL("https://repo1.maven.org/maven2/commons-io/commons-io/2.6/commons-io-2.6.jar" );
 
         File original = folder.newFile();
         FileUtils.copyURLToFile(source, original );
@@ -148,7 +148,7 @@ public class JDownloaderTest
     @Test
     public void verifyContentsImplicitTarget() throws Exception
     {
-        URL source = new URL("http://central.maven.org/maven2/org/commonjava/maven/ext/pom-manipulation-cli/3.3.1/pom-manipulation-cli-3.3.1.jar" );
+        URL source = new URL("https://repo1.maven.org/maven2/org/commonjava/maven/ext/pom-manipulation-cli/3.3.1/pom-manipulation-cli-3.3.1.jar" );
 
         File original = folder.newFile();
         FileUtils.copyURLToFile(source, original );
