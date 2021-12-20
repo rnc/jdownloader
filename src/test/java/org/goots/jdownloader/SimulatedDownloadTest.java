@@ -71,8 +71,8 @@ public class SimulatedDownloadTest
 
         ServletHolder holderPwd = new ServletHolder( "default", DefaultServlet.class );
         holderPwd.setInitParameter( "dirAllowed", "true" );
+        holderPwd.setInitParameter("cacheControl","max-age=0,public");
         context.addServlet( holderPwd, "/" );
-
         server.start();
     }
 
@@ -102,7 +102,7 @@ public class SimulatedDownloadTest
             for ( int i = 0; i < COUNT; i++ )
             {
                 long start = System.nanoTime();
-                new JDownloader( source ).minimumSplit( 0 ).target( target.getAbsolutePath() ).execute();
+                new JDownloader( source ).partCount( 4 ).minimumSplit( 0 ).target( target.getAbsolutePath() ).execute();
                 results.add( System.nanoTime() - start );
             }
 
@@ -116,7 +116,7 @@ public class SimulatedDownloadTest
             for ( int i = 0; i < COUNT; i++ )
             {
                 long start = System.nanoTime();
-                new JDownloader( source ).target( target.getAbsolutePath() ).execute();
+                new JDownloader( source ).partCount( 4 ).target( target.getAbsolutePath() ).execute();
                 results.add( System.nanoTime() - start );
             }
 
