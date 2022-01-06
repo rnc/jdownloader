@@ -168,7 +168,7 @@ public class JDownloaderTest
         }
     }
 
-    @Test(expected = InternalException.class )
+    @Test(expected = IOException.class )
     public void verifyErrorHandling1() throws Exception
     {
         new JDownloader( "" ).execute();

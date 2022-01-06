@@ -13,7 +13,10 @@ Multithreaded Java JDownloader
       --url=URL      Remote file url
   -d, --debug        Enable debug.
   -h, --help         Show this help message and exit.
-  -p=Part-Count      Number of parts to split into (default: 8)
+  -m=Max-Thread      Maximum number of threads to use. Default is 0 which means
+                       automatically determine based upon memory and part count.
+  -p=Part-Count      Number of parts to split into 
+                       (default: Available runtime processor count)
   -s=Size            Minimum size in bytes to multi-thread (default: 10000000). Set
                        to <= 0 to force single thread.
   -V, --version      Print version information and exit.

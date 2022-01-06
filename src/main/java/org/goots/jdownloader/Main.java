@@ -49,6 +49,10 @@ public class Main implements Callable<Void>
     @Option( names = { "-s" }, paramLabel = "Size", description = "Minimum size in bytes to multi-thread (default: ${DEFAULT-VALUE}). Set to <= 0 to force single thread." )
     private int minimumSplit = SPLIT_DEFAULT;
 
+    @Option( names = { "-m" }, paramLabel = "Max-Thread", description = "Maximum number of threads to use. Default is"
+                    + " 0 which means automatically determine based upon memory and part count." )
+    private int maxThread = 0;
+
     public static void main( String[] args ) throws Exception
     {
         final ExceptionHandler<List<Object>> handler = new ExceptionHandler<>();
@@ -81,7 +85,7 @@ public class Main implements Callable<Void>
             enableDebug();
         }
 
-        new JDownloader( remote ).target( target ).partCount( partCount ).minimumSplit( minimumSplit ).execute();
+        new JDownloader( remote ).target( target ).partCount( partCount ).minimumSplit( minimumSplit ).maxThread( maxThread ).execute();
 
         return null;
     }
