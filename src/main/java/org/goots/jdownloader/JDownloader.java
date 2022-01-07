@@ -205,10 +205,11 @@ public class JDownloader
                 {
                     maxThread = Math.toIntExact( memory / range ) ;
 
-                    logger.info( "With memory of {} calculated maxThread to be {} with range block of {}",
-                                 memory,
+                    logger.info( "With memory of {} calculated maxThread to be {} with range block of {} ({})",
+                                 ByteUtils.humanReadableByteCount( memory ),
                                  maxThread,
-                                 range  );
+                                 ByteUtils.humanReadableByteCount( range  ),
+                                 range);
                 }
 
                 ExecutorService service = Executors.newFixedThreadPool( maxThread );
