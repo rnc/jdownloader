@@ -205,10 +205,18 @@ public class JDownloader
                 {
                     maxThread = Math.toIntExact( memory / range ) ;
 
-                    logger.info( "With memory of {} calculated maxThread to be {} with range block of {}",
-                                 memory,
+                    logger.info( "With memory of {} calculated maxThread to be {} with range block of {} ({})",
+                                 ByteUtils.humanReadableByteCount( memory ),
                                  maxThread,
-                                 range  );
+                                 ByteUtils.humanReadableByteCount( range  ),
+                                 range);
+
+                    if (maxThread == 0)
+                    {
+                        throw new InternalException( "Unable to allocate sufficient threads with current memory "
+                                                                     + "allocation to download correctly. Increase "
+                                                                     + "-Xmx size." );
+                    }
                 }
 
                 ExecutorService service = Executors.newFixedThreadPool( maxThread );
