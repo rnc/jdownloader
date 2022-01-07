@@ -27,8 +27,6 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.goots.jdownloader.utils.ByteUtils;
 import org.goots.jdownloader.utils.InternalException;
-import org.goots.jdownloader.utils.InternalRuntimeException;
-import org.goots.jdownloader.utils.PartCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,13 +36,10 @@ import java.io.RandomAccessFile;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.util.HashSet;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class JDownloader
 {
@@ -53,31 +48,21 @@ public class JDownloader
 
     private final Logger logger = LoggerFactory.getLogger( JDownloader.class );
 
-    private int partCount = Runtime.getRuntime().availableProcessors() < 4 ? 4 : Runtime.getRuntime().availableProcessors();
+    private int partCount = Math.max( Runtime.getRuntime().availableProcessors(), 4 );
 
     private URL remote;
 
     private String target;
 
-    private PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
-
-    private BlockingQueue<PartCache> queue = new LinkedBlockingQueue<>( partCount );
-
     private int minimumSplit = SPLIT_DEFAULT;
+
+    private int maxThread = partCount / 2;
+
+    private PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
 
     public JDownloader ( String remote ) throws InternalException, IOException
     {
-        if ( remote == null || remote.length() == 0 )
-        {
-            throw new InternalException( "No remote specified" );
-        }
-
-        this.remote = new URL ( remote );
-
-        // Slightly smaller connection pool than the split count ; this ensures we don't
-        // cache the entire file in memory at once but stagger it slightly.
-        cm.setDefaultMaxPerRoute( partCount - (int)( partCount * 0.15 ) );
-        cm.setMaxTotal( partCount * 10 );
+        this(new URL( remote ));
     }
 
     public JDownloader ( URL remote ) throws InternalException
@@ -89,10 +74,8 @@ public class JDownloader
 
         this.remote = remote;
 
-        // Slightly smaller connection pool than the split count ; this ensures we don't
-        // cache the entire file in memory at once but stagger it slightly.
-        cm.setDefaultMaxPerRoute( partCount - (int)( partCount * 0.15 ) );
-        cm.setMaxTotal( partCount * 10 );
+        cm.setDefaultMaxPerRoute( partCount );
+        cm.setMaxTotal( partCount );
     }
 
     /**
@@ -132,6 +115,13 @@ public class JDownloader
         return this;
     }
 
+
+    public JDownloader maxThread( int maxThread )
+    {
+        this.maxThread = maxThread;
+        return this;
+    }
+
     /**
      * Computes a result, or throws an exception if unable to do so.
      *
@@ -139,10 +129,11 @@ public class JDownloader
      * @throws IOException if unable to compute a result
      * @throws URISyntaxException if unable to compute a result
      */
-    public void execute() throws InternalException, IOException, URISyntaxException
+    public void execute() throws InternalException, IOException, URISyntaxException, InterruptedException
     {
         long remoteSize = 0;
         RandomAccessFile targetFile;
+        AtomicLong byteCount = new AtomicLong();
 
         // If target hasn't been set the default it to the filename portion of the original file
         if ( target == null || target.length() == 0 )
@@ -150,7 +141,7 @@ public class JDownloader
             target = FilenameUtils.getName( remote.getFile() );
         }
 
-        logger.info( "Downloading {} to {}", remote, target );
+        logger.info( "Downloading {} to {} with partCount {} and maxThreads {}", remote, target, partCount, maxThread );
 
         try ( CloseableHttpClient pooledClient = HttpClients.custom().setConnectionManager( cm ).build() )
         {
@@ -206,10 +197,21 @@ public class JDownloader
             if ( downloadThreaded && remoteSize > minimumSplit )
             {
                 long range = remoteSize / partCount;
+                long memory = Runtime.getRuntime().maxMemory();
 
-                // 1 extra than the number of splits for the writer thread.
-                ExecutorService service = Executors.newFixedThreadPool( partCount + 1 );
-                HashSet<Future<PartCache>> parts = new HashSet<>();
+                // If the maxThread is -1, calculate the appropriate number of threads given the current memory
+                // limits. We want to ensure we are only downloading enough simultaneously not to exceed the memory.
+                if ( maxThread <= 0 )
+                {
+                    maxThread = Math.toIntExact( memory / range ) ;
+
+                    logger.info( "With memory of {} calculated maxThread to be {} with range block of {}",
+                                 memory,
+                                 maxThread,
+                                 range  );
+                }
+
+                ExecutorService service = Executors.newFixedThreadPool( maxThread );
 
                 targetFile = new RandomAccessFile( target, "rw" );
                 // Pre-allocate the length to avoid repeated resize.
@@ -217,64 +219,22 @@ public class JDownloader
 
                 for ( int i = 1; i <= partCount; i++ )
                 {
-                    parts.add( service.submit( new PartExtractor( pooledClient, partCount, remoteURI, remoteSize, range, i ) ) );
-                }
-                Future wFuture = service.submit( new Writer( partCount, queue, targetFile ) );
-
-                try
-                {
-                    parts.parallelStream().forEach( p -> {
-                        try
-                        {
-                            queue.put( p.get() );
-                        }
-                        catch ( InterruptedException | ExecutionException e )
-                        {
-                            throw new InternalRuntimeException( "Stream error", e );
-                        }
-                    } );
-                }
-                catch ( InternalRuntimeException e )
-                {
-                    if ( e.getCause() instanceof IOException )
-                    {
-                        throw (IOException) e.getCause();
-                    }
-                    else if ( e.getCause() instanceof InternalException )
-                    {
-                        throw (InternalException) e.getCause();
-                    }
-                    else if ( e.getCause() instanceof OutOfMemoryError )
-                    {
-                        logger.error( "Caught OutOfMemory exception from PartExtractor", e );
-
-                        // Terminate as fatal error.
-                        service.shutdownNow();
-
-                        throw new InternalException( "Fatal out of memory", e );
-                    }
-                    else
-                    {
-                        logger.error( "Caught exception from PartExtractor", e );
-                        throw new InternalException( "Caught exception from PartExtractor", e );
-                    }
+                    service.submit( new PartExtractor( target, byteCount, pooledClient, partCount, remoteURI,
+                                                       remoteSize,
+                                                       range,
+                                                       i ) );
                 }
 
-                while ( true )
-                {
-                    // no-op
-                    if ( wFuture.isDone() )
-                    {
-                        break;
-                    }
-                }
 
                 service.shutdown();
+                service.awaitTermination( Long.MAX_VALUE, TimeUnit.MILLISECONDS );
                 targetFile.close();
+                logger.info( "Completed writing {} ( {} bytes )", ByteUtils.humanReadableByteCount( byteCount.get() ), byteCount.get() );
             }
             else
             {
                 File fTarget = new File( target );
+                logger.debug( "Using copyURLToFile as single thread download for {} to {}", remote, fTarget );
                 FileUtils.copyURLToFile( remote, fTarget );
 
                 logger.info( "Completed writing {} ( {} bytes )", ByteUtils.humanReadableByteCount( fTarget.length() ),
