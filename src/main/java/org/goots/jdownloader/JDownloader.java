@@ -210,6 +210,13 @@ public class JDownloader
                                  maxThread,
                                  ByteUtils.humanReadableByteCount( range  ),
                                  range);
+
+                    if (maxThread == 0)
+                    {
+                        throw new InternalException( "Unable to allocate sufficient threads with current memory "
+                                                                     + "allocation to download correctly. Increase "
+                                                                     + "-Xmx size." );
+                    }
                 }
 
                 ExecutorService service = Executors.newFixedThreadPool( maxThread );
